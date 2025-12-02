@@ -1,0 +1,39 @@
+.gradle/
+/local.properties
+/.idea/
+/*.iml
+/build/
+**/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# macOS
+.DS_Store
+
+# Keystore
+*.jks
+*.keystore
+
+# Log files
+*.log
+
+# Generated files
+app/src/main/res/google-services.json
+
+# Android Studio specific
+.idea/
+**/.idea/
+
+# gradle wrapper
+gradle/wrapper/gradle-wrapper.jar
+
+# Kotlin/Java
+*.class
+*.jar
+
+# Misc
+*.keystore
+
+# If you want to keep local config files
+secrets.properties
