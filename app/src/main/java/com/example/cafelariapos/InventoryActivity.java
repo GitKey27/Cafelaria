@@ -17,6 +17,7 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,6 +28,9 @@ public class InventoryActivity extends AppCompatActivity {
     private SharedPreferences prefs;
     private Gson gson;
     private Map<String, Product> productMap = new TreeMap<>();
+    // holds pending (unconfirmed) signed deltas per product id: positive = adds, negative = subtracts
+    private Map<String, Integer> pendingDeltas = new HashMap<>();
+    // footer buttons rendered by renderInventory()
     private static final String PREFS_NAME = "UserData";
     private static final String KEY_PRODUCTS = "products";
 
@@ -108,25 +112,41 @@ public class InventoryActivity extends AppCompatActivity {
 
             final TextView stock = new TextView(this);
             stock.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.4f));
-            stock.setText(String.format(Locale.getDefault(), "%d", p.getStock()));
+            // show current stock plus any pending (unconfirmed) delta (positive or negative)
+            int pending = pendingDeltas.containsKey(p.getId()) ? pendingDeltas.get(p.getId()) : 0;
+            String pendingSuffix = "";
+            if (pending > 0) pendingSuffix = " ( +" + pending + ")";
+            else if (pending < 0) pendingSuffix = " ( " + pending + ")"; // negative already has '-'
+            stock.setText(String.format(Locale.getDefault(), "%d%s", p.getStock() + pending, pendingSuffix));
             stock.setTextColor(Color.BLACK);
 
             Button btnInc = new Button(this);
             btnInc.setText("+");
+
+            // When '+' is tapped, accumulate a pending addition for this product (no save yet)
             btnInc.setOnClickListener(v -> {
-                p.setStock(p.getStock() + 1);
-                stock.setText(String.format(Locale.getDefault(), "%d", p.getStock()));
-                saveProducts();
+                int cur = pendingDeltas.containsKey(p.getId()) ? pendingDeltas.get(p.getId()) : 0;
+                pendingDeltas.put(p.getId(), cur + 1);
+                int pendingNow = pendingDeltas.get(p.getId());
+                String suffix = pendingNow > 0 ? " ( +" + pendingNow + ")" : (pendingNow < 0 ? " ( " + pendingNow + ")" : "");
+                stock.setText(String.format(Locale.getDefault(), "%d%s", p.getStock() + pendingNow, suffix));
+                renderFooterButtonsIfNeeded();
             });
 
             Button btnDec = new Button(this);
             btnDec.setText("-");
             btnDec.setOnClickListener(v -> {
-                if (p.getStock() > 0) {
-                    p.setStock(p.getStock() - 1);
-                    stock.setText(String.format(Locale.getDefault(), "%d", p.getStock()));
-                    saveProducts();
-                } else Toast.makeText(this, "Stock already zero", Toast.LENGTH_SHORT).show();
+                int curPending = pendingDeltas.containsKey(p.getId()) ? pendingDeltas.get(p.getId()) : 0;
+                // Prevent pending decrements that would make resulting stock negative
+                if (p.getStock() + curPending <= 0) {
+                    Toast.makeText(this, "Cannot reduce below zero", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                pendingDeltas.put(p.getId(), curPending - 1);
+                int pendingNow = pendingDeltas.get(p.getId());
+                String suffix = pendingNow > 0 ? " ( +" + pendingNow + ")" : (pendingNow < 0 ? " ( " + pendingNow + ")" : "");
+                stock.setText(String.format(Locale.getDefault(), "%d%s", p.getStock() + pendingNow, suffix));
+                renderFooterButtonsIfNeeded();
             });
 
             row.addView(name);
@@ -135,6 +155,66 @@ public class InventoryActivity extends AppCompatActivity {
             row.addView(btnDec);
             container.addView(row);
         }
+
+        // After listing all products, render Confirm/Cancel footer if there are pending adds
+        renderFooterButtonsIfNeeded();
+    }
+
+    // Adds a footer with Confirm All and Cancel buttons when pendingAdds is non-empty.
+    private void renderFooterButtonsIfNeeded() {
+        // remove any existing footer if present (we clear container at start of renderInventory, but this
+        // helper may be called multiple times, so ensure we don't duplicate footers)
+        // First, remove any previous footer views with tag "pendingFooter"
+        for (int i = container.getChildCount() - 1; i >= 0; i--) {
+            View child = container.getChildAt(i);
+            Object tag = child.getTag();
+            if (tag != null && "pendingFooter".equals(tag)) {
+                container.removeViewAt(i);
+            }
+        }
+
+        // only show footer if there is at least one non-zero pending delta
+        boolean hasPending = false;
+        for (Integer v : pendingDeltas.values()) if (v != 0) { hasPending = true; break; }
+        if (!hasPending) return;
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL);
+        footer.setTag("pendingFooter");
+        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        flp.setMargins(0, 12, 0, 12);
+        footer.setLayoutParams(flp);
+
+        Button btnConfirmAll = new Button(this);
+        btnConfirmAll.setText("Confirm All");
+        btnConfirmAll.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        btnConfirmAll.setOnClickListener(v -> {
+            // apply all pending signed deltas; clamp to zero to avoid negative stock
+            for (Map.Entry<String, Integer> e : pendingDeltas.entrySet()) {
+                Product prod = productMap.get(e.getKey());
+                if (prod == null) continue;
+                int result = prod.getStock() + e.getValue();
+                if (result < 0) result = 0;
+                prod.setStock(result);
+            }
+            pendingDeltas.clear();
+            saveProducts();
+            renderInventory();
+            Toast.makeText(InventoryActivity.this, "Stock updates confirmed", Toast.LENGTH_SHORT).show();
+        });
+
+        Button btnCancelAll = new Button(this);
+        btnCancelAll.setText("Cancel");
+        btnCancelAll.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        btnCancelAll.setOnClickListener(v -> {
+            pendingDeltas.clear();
+            renderInventory();
+            Toast.makeText(InventoryActivity.this, "Pending updates cancelled", Toast.LENGTH_SHORT).show();
+        });
+
+        footer.addView(btnConfirmAll);
+        footer.addView(btnCancelAll);
+        container.addView(footer);
     }
 
     private void showAddProductDialog() {

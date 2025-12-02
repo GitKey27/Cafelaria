@@ -219,7 +219,8 @@ public class DashboardActivity extends AppCompatActivity {
                 items.add(new SaleItem("p_cappuccino", "Cappuccino", 2, 140.00));
                 long ts;
                 try {
-                    ts = java.time.OffsetDateTime.parse("2025-10-23T09:12:00+08:00").toInstant().toEpochMilli();
+
+                    ts = System.currentTimeMillis();
                 } catch (Exception ex) {
                     ts = System.currentTimeMillis();
                 }
@@ -450,6 +451,10 @@ public class DashboardActivity extends AppCompatActivity {
         }
 
         saveProducts();
+        // after saving products and creating the sale, reset any active discount
+        // so that subsequent product displays show original prices
+        activeDiscountPercent = 0;
+        activeDiscountCode = null;
         renderProducts();
         TextView tvAlerts = findViewById(R.id.tvAlerts);
         updateLowStockAlerts(tvAlerts);
@@ -531,22 +536,22 @@ public class DashboardActivity extends AppCompatActivity {
         final int[] previewPercent = { activeDiscountPercent };
 
         // pick a sample price to show preview (first product in current view, or 0)
-        double samplePrice = 0.0;
+        final double[] samplePriceRef = new double[]{0.0};
         for (Product p : productMap.values()) {
             String cat = p.getCategory() == null ? "" : p.getCategory().toLowerCase(Locale.ROOT);
             boolean isDrink = cat.contains("drink");
             boolean isBakery = cat.contains("bakery") || cat.contains("pastry");
             if ("Drinks".equals(currentSection) && !isDrink) continue;
             if ("Pastries".equals(currentSection) && !isBakery) continue;
-            samplePrice = p.getPrice();
+            samplePriceRef[0] = p.getPrice();
             break;
         }
 
         // update preview helper
         Runnable updatePreview = () -> runOnUiThread(() -> {
             if (previewPercent[0] > 0) {
-                double discounted = samplePrice * (1 - (previewPercent[0] / 100.0));
-                tvPreview.setText(String.format(Locale.getDefault(), "Preview: ₱%.2f -> ₱%.2f (%d%% off)", samplePrice, discounted, previewPercent[0]));
+                double discounted = samplePriceRef[0] * (1 - (previewPercent[0] / 100.0));
+                tvPreview.setText(String.format(Locale.getDefault(), "Preview: ₱%.2f -> ₱%.2f (%d%% off)", samplePriceRef[0], discounted, previewPercent[0]));
             } else {
                 tvPreview.setText("No discount selected — choose a percentage or type a code to preview.");
             }

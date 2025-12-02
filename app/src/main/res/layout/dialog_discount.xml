@@ -26,7 +26,8 @@
         android:padding="12dp"
         android:layout_marginBottom="16dp"
         android:inputType="text"
-        android:autofillHints="username" />
+        android:autofillHints="username"
+        android:importantForAutofill="no" />
 
     <TextView
         android:id="@+id/tvDiscountPreview"
@@ -44,6 +45,7 @@
         android:layout_marginBottom="8dp" />
 
     <LinearLayout
+        style="?android:attr/buttonBarStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -78,6 +80,7 @@
     </LinearLayout>
 
     <LinearLayout
+        style="?android:attr/buttonBarStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
