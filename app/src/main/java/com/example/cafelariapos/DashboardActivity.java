@@ -191,7 +191,7 @@ public class DashboardActivity extends AppCompatActivity {
         List<Product> list = new ArrayList<>(productMap.values());
         String json = gson.toJson(list);
         prefs.edit().putString(KEY_PRODUCTS, json).apply();
-        TextView tvAlerts = findViewById(R.id.tvAlerts);
+        TextView tvAlerts = findViewById(R.id.tvAlerts);git
         updateLowStockAlerts(tvAlerts);
     }
 
